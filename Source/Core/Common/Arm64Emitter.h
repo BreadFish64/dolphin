@@ -1,18 +1,19 @@
-// Copyright 2015 Dolphin Emulator Project
+// Copyright 2015 Dolphin Emulator Project / 2018 dynarmic project
 // Licensed under GPLv2+
 // Refer to the license.txt file included.
 
 #pragma once
 
+#include <bitset>
 #include <cstring>
 #include <functional>
 
-#include "Common/ArmCommon.h"
-#include "Common/Assert.h"
-#include "Common/BitSet.h"
-#include "Common/CodeBlock.h"
-#include "Common/Common.h"
+#include "arm_common.h"
+#include "code_block.h"
+#include "common/assert.h"
+#include "common/common_types.h"
 
+namespace Dynarmic::BackendA64 {
 namespace Arm64Gen {
 // X30 serves a dual purpose as a link register
 // Encoded as <u3:type><u5:reg>
@@ -442,7 +443,7 @@ public:
             return (m_shifttype << 22) | (m_shift << 10);
             break;
         default:
-            DEBUG_ASSERT_MSG(DYNA_REC, false, "Invalid type in GetData");
+            DEBUG_ASSERT_MSG(false, "Invalid type in GetData");
             break;
         }
         return 0;
@@ -684,7 +685,8 @@ public:
     void BICS(ARM64Reg Rd, ARM64Reg Rn, ARM64Reg Rm) {
         BICS(Rd, Rn, Rm, ArithOption(Rd, ST_LSL, 0));
     }
-    // Convenience wrappers around ORR. These match the official convenience syntax.
+    // Convenience wrappers around ORR. These match the official convenience
+    // syntax.
     void MOV(ARM64Reg Rd, ARM64Reg Rm, ArithOption Shift);
     void MOV(ARM64Reg Rd, ARM64Reg Rm);
     void MVN(ARM64Reg Rd, ARM64Reg Rm);
@@ -817,12 +819,12 @@ public:
     bool MOVI2R2(ARM64Reg Rd, u64 imm1, u64 imm2);
     template <class P>
     void MOVP2R(ARM64Reg Rd, P* ptr) {
-        ASSERT_MSG(DYNA_REC, Is64Bit(Rd), "Can't store pointers in 32-bit registers");
+        ASSERT_MSG(Is64Bit(Rd), "Can't store pointers in 32-bit registers");
         MOVI2R(Rd, (uintptr_t)ptr);
     }
 
-    // Wrapper around AND x, y, imm etc. If you are sure the imm will work, no need to pass a
-    // scratch register.
+    // Wrapper around AND x, y, imm etc. If you are sure the imm will work, no
+    // need to pass a scratch register.
     void ANDI2R(ARM64Reg Rd, ARM64Reg Rn, u64 imm, ARM64Reg scratch = INVALID_REG);
     void ANDSI2R(ARM64Reg Rd, ARM64Reg Rn, u64 imm, ARM64Reg scratch = INVALID_REG);
     void TSTI2R(ARM64Reg Rn, u64 imm, ARM64Reg scratch = INVALID_REG) {
@@ -848,8 +850,8 @@ public:
     bool TryEORI2R(ARM64Reg Rd, ARM64Reg Rn, u32 imm);
 
     // ABI related
-    void ABI_PushRegisters(BitSet32 registers);
-    void ABI_PopRegisters(BitSet32 registers, BitSet32 ignore_mask = BitSet32(0));
+    void ABI_PushRegisters(std::bitset<32> registers);
+    void ABI_PopRegisters(std::bitset<32> registers);
 
     // Utility to generate a call to a std::function object.
     //
@@ -918,7 +920,8 @@ public:
     void FABS(ARM64Reg Rd, ARM64Reg Rn);
     void FNEG(ARM64Reg Rd, ARM64Reg Rn);
     void FSQRT(ARM64Reg Rd, ARM64Reg Rn);
-    void FMOV(ARM64Reg Rd, ARM64Reg Rn, bool top = false); // Also generalized move between GPR/FP
+    void FMOV(ARM64Reg Rd, ARM64Reg Rn,
+              bool top = false); // Also generalized move between GPR/FP
 
     // Scalar - 2 Source
     void FADD(ARM64Reg Rd, ARM64Reg Rn, ARM64Reg Rm);
@@ -992,9 +995,8 @@ public:
     void FCVT(u8 size_to, u8 size_from, ARM64Reg Rd, ARM64Reg Rn);
 
     // Scalar convert float to int, in a lot of variants.
-    // Note that the scalar version of this operation has two encodings, one that goes to an integer
-    // register
-    // and one that outputs to a scalar fp register.
+    // Note that the scalar version of this operation has two encodings, one that
+    // goes to an integer register and one that outputs to a scalar fp register.
     void FCVTS(ARM64Reg Rd, ARM64Reg Rn, RoundingMode round);
     void FCVTU(ARM64Reg Rd, ARM64Reg Rn, RoundingMode round);
 
@@ -1055,8 +1057,8 @@ public:
     void MOVI2FDUP(ARM64Reg Rd, float value, ARM64Reg scratch = INVALID_REG);
 
     // ABI related
-    void ABI_PushRegisters(BitSet32 registers, ARM64Reg tmp = INVALID_REG);
-    void ABI_PopRegisters(BitSet32 registers, ARM64Reg tmp = INVALID_REG);
+    void ABI_PushRegisters(std::bitset<32> registers, ARM64Reg tmp = INVALID_REG);
+    void ABI_PopRegisters(std::bitset<32> registers, ARM64Reg tmp = INVALID_REG);
 
 private:
     ARM64XEmitter* m_emit;
@@ -1108,13 +1110,13 @@ private:
     void UXTL(u8 src_size, ARM64Reg Rd, ARM64Reg Rn, bool upper);
 };
 
-class ARM64CodeBlock : public Common::CodeBlock<ARM64XEmitter> {
+class ARM64CodeBlock : public Dynarmic::BackendA64::CodeBlock<ARM64XEmitter> {
 private:
     void PoisonMemory() override {
-        // If our memory isn't a multiple of u32 then this won't write the last remaining bytes with
-        // anything
-        // Less than optimal, but there would be nothing we could do but throw a runtime warning
-        // anyway. AArch64: 0xD4200000 = BRK 0
+        // If our memory isn't a multiple of u32 then this won't write the last
+        // remaining bytes with anything Less than optimal, but there would be
+        // nothing we could do but throw a runtime warning anyway. AArch64:
+        // 0xD4200000 = BRK 0
         constexpr u32 brk_0 = 0xD4200000;
 
         for (size_t i = 0; i < region_size; i += sizeof(u32)) {
@@ -1123,3 +1125,4 @@ private:
     }
 };
 } // namespace Arm64Gen
+} // namespace Dynarmic::BackendA64

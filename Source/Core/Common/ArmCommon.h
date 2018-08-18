@@ -1,9 +1,10 @@
-// Copyright 2014 Dolphin Emulator Project
+// Copyright 2014 Dolphin Emulator Project / 2018 dynarmic project
 // Licensed under GPLv2+
 // Refer to the license.txt file included.
 
-#include "Common/CommonTypes.h"
+#include "common/common_types.h"
 
+namespace Dynarmic::BackendA64 {
 enum CCFlags {
     CC_EQ = 0,     // Equal
     CC_NEQ,        // Not equal
@@ -24,3 +25,4 @@ enum CCFlags {
     CC_LO = CC_CC, // Alias of CC_CC  Unsigned lower
 };
 const u32 NO_COND = 0xE0000000;
+} // namespace Dynarmic::BackendA64

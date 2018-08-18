@@ -1,4 +1,4 @@
-// Copyright 2014 Dolphin Emulator Project
+// Copyright 2014 Dolphin Emulator Project / 2018 dynarmic project
 // Licensed under GPLv2+
 // Refer to the license.txt file included.
 
@@ -7,22 +7,22 @@
 #include <cstddef>
 #include <vector>
 
-#include "Common/Assert.h"
-#include "Common/CommonTypes.h"
-#include "Common/MemoryUtil.h"
+#include <sys/mman.h>
 
-namespace Common {
+#include "common/assert.h"
+#include "common/common_types.h"
+
+namespace Dynarmic::BackendA64 {
 // Everything that needs to generate code should inherit from this.
-// You get memory management for free, plus, you can use all emitter functions without
-// having to prefix them with gen-> or something similar.
-// Example implementation:
-// class JIT : public CodeBlock<ARMXEmitter> {}
+// You get memory management for free, plus, you can use all emitter functions
+// without having to prefix them with gen-> or something similar. Example
+// implementation: class JIT : public CodeBlock<ARMXEmitter> {}
 template <class T>
 class CodeBlock : public T {
 private:
-    // A privately used function to set the executable RAM space to something invalid.
-    // For debugging usefulness it should be used to set the RAM to a host specific breakpoint
-    // instruction
+    // A privately used function to set the executable RAM space to something
+    // invalid. For debugging usefulness it should be used to set the RAM to a
+    // host specific breakpoint instruction
     virtual void PoisonMemory() = 0;
 
 protected:
@@ -50,21 +50,26 @@ public:
     void AllocCodeSpace(size_t size) {
         region_size = size;
         total_region_size = size;
-        region = static_cast<u8*>(Common::AllocateExecutableMemory(total_region_size));
+        void* ptr =
+            mmap(nullptr, size, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_ANON | MAP_PRIVATE, -1, 0);
+        if (ptr == MAP_FAILED)
+            ptr = nullptr;
+        region = static_cast<u8*>(ptr);
         T::SetCodePtr(region);
     }
 
-    // Always clear code space with breakpoints, so that if someone accidentally executes
-    // uninitialized, it just breaks into the debugger.
+    // Always clear code space with breakpoints, so that if someone accidentally
+    // executes uninitialized, it just breaks into the debugger.
     void ClearCodeSpace() {
         PoisonMemory();
         ResetCodePtr();
     }
 
-    // Call this when shutting down. Don't rely on the destructor, even though it'll do the job.
+    // Call this when shutting down. Don't rely on the destructor, even though
+    // it'll do the job.
     void FreeCodeSpace() {
         ASSERT(!m_is_child);
-        Common::FreeMemoryPages(region, total_region_size);
+        ASSERT(munmap(region, total_region_size) != 0);
         region = nullptr;
         region_size = 0;
         total_region_size = 0;
@@ -79,9 +84,10 @@ public:
         return ptr >= region && ptr < (region + region_size);
     }
     // Cannot currently be undone. Will write protect the entire code region.
-    // Start over if you need to change the code (call FreeCodeSpace(), AllocCodeSpace()).
+    // Start over if you need to change the code (call FreeCodeSpace(),
+    // AllocCodeSpace()).
     void WriteProtect() {
-        Common::WriteProtectMemory(region, region_size, true);
+        ASSERT(mprotect(region, size, PROT_READ | PROT_EXEC) != 0);
     }
     void ResetCodePtr() {
         T::SetCodePtr(region);
@@ -99,13 +105,14 @@ public:
     bool HasChildren() const {
         return region_size != total_region_size;
     }
+
     u8* AllocChildCodeSpace(size_t child_size) {
-        ASSERT_MSG(DYNA_REC, child_size < GetSpaceLeft(),
-                   "Insufficient space for child allocation.");
+        ASSERT_MSG(child_size < GetSpaceLeft(), "Insufficient space for child allocation.");
         u8* child_region = region + region_size - child_size;
         region_size -= child_size;
         return child_region;
     }
+
     void AddChildCodeSpace(CodeBlock* child, size_t child_size) {
         u8* child_region = AllocChildCodeSpace(child_size);
         child->m_is_child = true;
@@ -116,4 +123,4 @@ public:
         m_children.emplace_back(child);
     }
 };
-} // namespace Common
+} // namespace Dynarmic::BackendA64
